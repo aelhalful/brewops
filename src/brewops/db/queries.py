@@ -127,9 +127,28 @@ def get_machine_health(conn: sqlite3.Connection, machine_id: int) -> dict[str, A
             (machine_id,),
         )
     ]
+    top_drinks = [
+        dict(r)
+        for r in conn.execute(
+            """
+            WITH counts AS (
+                SELECT dt.name, dt.label, COUNT(be.id) AS count
+                FROM brew_events be
+                JOIN drink_types dt ON dt.name = be.drink_type
+                WHERE be.machine_id = ?
+                GROUP BY dt.id
+            )
+            SELECT name, label, count FROM counts
+            WHERE count = (SELECT MAX(count) FROM counts)
+            ORDER BY name
+            """,
+            (machine_id,),
+        )
+    ]
     return machine | {
         "brew_count": brews["count"],
         "last_brew": brews["last_brew"],
         "last_maintenance": dict(last_maintenance) if last_maintenance else None,
         "recent_errors": recent_errors,
+        "top_drinks": top_drinks,
     }
