@@ -54,6 +54,22 @@ def parse_timestamp(value: str) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
 
 
+def validate_date_range(start: str | None, end: str | None) -> None:
+    """Validate start and end dates are in YYYY-MM-DD format and start <= end."""
+    if start:
+        try:
+            datetime.strptime(start, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, f"unparsable date {start!r}")
+    if end:
+        try:
+            datetime.strptime(end, "%Y-%m-%d")
+        except ValueError:
+            raise HTTPException(400, f"unparsable date {end!r}")
+    if start and end and start > end:
+        raise HTTPException(400, "start date is after end date")
+
+
 class BrewIn(BaseModel):
     machine_id: int
     drink_type: str
@@ -71,8 +87,13 @@ class MaintenanceIn(BaseModel):
 
 
 @app.get("/api/stats")
-def stats(conn: sqlite3.Connection = Depends(get_db)):
-    return queries.get_stats(conn)
+def stats(
+    start: str | None = None,
+    end: str | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    validate_date_range(start, end)
+    return queries.get_stats(conn, start=start, end=end)
 
 
 @app.get("/api/machines")
@@ -81,8 +102,14 @@ def machines(conn: sqlite3.Connection = Depends(get_db)):
 
 
 @app.get("/api/machines/{machine_id}")
-def machine_health(machine_id: int, conn: sqlite3.Connection = Depends(get_db)):
-    health = queries.get_machine_health(conn, machine_id)
+def machine_health(
+    machine_id: int,
+    start: str | None = None,
+    end: str | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    validate_date_range(start, end)
+    health = queries.get_machine_health(conn, machine_id, start=start, end=end)
     if health is None:
         raise HTTPException(404, f"no machine with id {machine_id}")
     return health

@@ -79,8 +79,13 @@ function renderMachineCards(healths) {
   }
 }
 
-async function loadDashboard() {
-  const stats = await fetchJSON("/api/stats");
+async function loadDashboard(start, end) {
+  const queryParams = [];
+  if (start) queryParams.push(`start=${start}`);
+  if (end) queryParams.push(`end=${end}`);
+  const queryString = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+
+  const stats = await fetchJSON(`/api/stats${queryString}`);
   document.getElementById("total-brews").textContent = stats.total_brews;
   const lastDay = stats.per_day[stats.per_day.length - 1];
   document.getElementById("brews-today").textContent = lastDay ? lastDay.count : 0;
@@ -89,8 +94,23 @@ async function loadDashboard() {
 
   const machines = await fetchJSON("/api/machines");
   document.getElementById("machine-count").textContent = machines.length;
-  const healths = await Promise.all(machines.map((m) => fetchJSON(`/api/machines/${m.id}`)));
+  const healths = await Promise.all(machines.map((m) => fetchJSON(`/api/machines/${m.id}${queryString}`)));
   renderMachineCards(healths);
+}
+
+// ---- filter ----
+
+function defaultRange() {
+  const now = new Date();
+  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+  const today = new Date(now);
+  const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, ...
+  const monday = new Date(today);
+  monday.setDate(today.getDate() - (dayOfWeek === 0 ? 6 : dayOfWeek - 1));
+  const friday = new Date(monday);
+  friday.setDate(monday.getDate() + 4);
+  const toDateString = (d) => d.toISOString().slice(0, 10);
+  return { start: toDateString(monday), end: toDateString(friday) };
 }
 
 // ---- forms ----
@@ -109,6 +129,41 @@ function fillSelect(select, items, valueKey, labelKey) {
     option.textContent = item[labelKey];
     select.appendChild(option);
   }
+}
+
+async function setupFilter() {
+  const range = defaultRange();
+  document.getElementById("filter-start").value = range.start;
+  document.getElementById("filter-end").value = range.end;
+
+  document.getElementById("filter-apply").addEventListener("click", async () => {
+    const message = document.getElementById("filter-message");
+    message.textContent = "";
+    message.className = "message";
+    try {
+      const start = document.getElementById("filter-start").value;
+      const end = document.getElementById("filter-end").value;
+      await loadDashboard(start, end);
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add("error");
+    }
+  });
+
+  document.getElementById("filter-reset").addEventListener("click", async () => {
+    const message = document.getElementById("filter-message");
+    message.textContent = "";
+    message.className = "message";
+    try {
+      const range = defaultRange();
+      document.getElementById("filter-start").value = range.start;
+      document.getElementById("filter-end").value = range.end;
+      await loadDashboard(range.start, range.end);
+    } catch (error) {
+      message.textContent = error.message;
+      message.classList.add("error");
+    }
+  });
 }
 
 async function setupForms() {
@@ -158,7 +213,9 @@ async function submitForm(event, url, messageId, buildPayload) {
   }
 }
 
-loadDashboard().catch((error) => {
+setupFilter();
+const range = defaultRange();
+loadDashboard(range.start, range.end).catch((error) => {
   document.getElementById("total-brews").textContent = "!";
   console.error("Dashboard failed to load:", error);
 });
