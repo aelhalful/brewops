@@ -84,6 +84,7 @@ async function loadDashboard(start, end) {
   if (start) queryParams.push(`start=${start}`);
   if (end) queryParams.push(`end=${end}`);
   const queryString = queryParams.length > 0 ? `?${queryParams.join("&")}` : "";
+  document.getElementById("export-link").href = `/api/export.csv${queryString}`;
 
   const stats = await fetchJSON(`/api/stats${queryString}`);
   document.getElementById("total-brews").textContent = stats.total_brews;

@@ -1,5 +1,7 @@
 """FastAPI app: JSON API + static frontend, one process, port 8123."""
 
+import csv
+import io
 import sqlite3
 from contextlib import asynccontextmanager, closing
 from datetime import datetime
@@ -7,6 +9,7 @@ from pathlib import Path
 
 import uvicorn
 from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -113,6 +116,31 @@ def machine_health(
     if health is None:
         raise HTTPException(404, f"no machine with id {machine_id}")
     return health
+
+
+@app.get("/api/export.csv")
+def export_csv(
+    start: str | None = None,
+    end: str | None = None,
+    conn: sqlite3.Connection = Depends(get_db),
+):
+    validate_date_range(start, end)
+    rows = queries.get_brew_events_for_export(conn, start=start, end=end)
+
+    buffer = io.StringIO()
+    writer = csv.DictWriter(
+        buffer,
+        fieldnames=["timestamp", "machine", "drink_type", "drink_label", "duration_s", "temp_c", "source"],
+    )
+    writer.writeheader()
+    writer.writerows(rows)
+    buffer.seek(0)
+
+    return StreamingResponse(
+        buffer,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="brewops-export.csv"'},
+    )
 
 
 @app.get("/api/drink-types")

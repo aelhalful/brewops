@@ -187,3 +187,33 @@ def get_machine_health(conn: sqlite3.Connection, machine_id: int, start: str | N
         "recent_errors": recent_errors,
         "top_drinks": top_drinks,
     }
+
+
+def get_brew_events_for_export(conn: sqlite3.Connection, start: str | None = None, end: str | None = None) -> list[dict[str, Any]]:
+    """Raw brew events for CSV export."""
+    where_clause = ""
+    params: tuple[str, ...] = ()
+
+    if start and end:
+        where_clause = "WHERE DATE(be.timestamp) BETWEEN ? AND ?"
+        params = (start, end)
+    elif start:
+        where_clause = "WHERE DATE(be.timestamp) >= ?"
+        params = (start,)
+    elif end:
+        where_clause = "WHERE DATE(be.timestamp) <= ?"
+        params = (end,)
+
+    rows = conn.execute(
+        f"""
+        SELECT be.timestamp, m.name AS machine, dt.name AS drink_type, dt.label AS drink_label,
+               be.duration_s, be.temp_c, be.source
+        FROM brew_events be
+        JOIN machines m ON m.id = be.machine_id
+        JOIN drink_types dt ON dt.name = be.drink_type
+        {where_clause}
+        ORDER BY be.timestamp
+        """,
+        params,
+    )
+    return [dict(r) for r in rows]
